@@ -67,8 +67,8 @@ class ThermostatCardEditor extends HTMLElement {
 
     const actionSelect = this.shadowRoot.getElementById('action-type');
     actionSelect.value = currentAction;
-    actionSelect.addEventListener('selected', (e) => {
-      const val      = e.detail?.item?.value ?? currentAction;
+    actionSelect.addEventListener('value-changed', (e) => {
+      const val      = e.detail?.value ?? currentAction;
       const navField = this.shadowRoot.querySelector('.nav-field');
       if (navField) navField.style.display = val === 'navigate' ? 'block' : 'none';
       this._config = {
