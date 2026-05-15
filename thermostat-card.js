@@ -40,11 +40,16 @@ class ThermostatCardEditor extends HTMLElement {
         </div>
         <div>
           <label>Actie bij tikken op temperatuur</label>
-          <ha-select id="action-type" label="Actie" style="width:100%">
-            <mwc-list-item value="more-info">Meer informatie (standaard)</mwc-list-item>
-            <mwc-list-item value="navigate">Navigeren naar pagina</mwc-list-item>
-            <mwc-list-item value="none">Geen actie</mwc-list-item>
-          </ha-select>
+          <select id="action-type" style="
+            width:100%; padding:10px 8px; border-radius:6px;
+            background:var(--secondary-background-color, #2a2a2a);
+            color:var(--primary-text-color, white);
+            border:1px solid var(--divider-color, rgba(255,255,255,0.2));
+            font-size:14px; cursor:pointer;">
+            <option value="more-info">Meer informatie (standaard)</option>
+            <option value="navigate">Navigeren naar pagina</option>
+            <option value="none">Geen actie</option>
+          </select>
         </div>
         <div class="nav-field">
           <label>Navigatiepad</label>
@@ -64,10 +69,10 @@ class ThermostatCardEditor extends HTMLElement {
       this._fire();
     });
 
-    // Actie-keuzelijst — luistert naar value-changed, bouwt DOM NIET opnieuw
+    // Actie-keuzelijst — native select, bouwt DOM NIET opnieuw
     const actionSelect = this.shadowRoot.getElementById('action-type');
-    actionSelect.addEventListener('value-changed', (e) => {
-      const val = e.detail?.value;
+    actionSelect.addEventListener('change', (e) => {
+      const val = e.target.value;
       if (!val) return;
       this.shadowRoot.querySelector('.nav-field').style.display =
         val === 'navigate' ? 'block' : 'none';
@@ -108,7 +113,7 @@ class ThermostatCardEditor extends HTMLElement {
     }
 
     const actionSelect = this.shadowRoot.getElementById('action-type');
-    if (actionSelect) actionSelect.value = action;
+    if (actionSelect) actionSelect.value = action || 'more-info';
 
     const navField = this.shadowRoot.querySelector('.nav-field');
     if (navField) navField.style.display = action === 'navigate' ? 'block' : 'none';
