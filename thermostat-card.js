@@ -6,30 +6,29 @@ class ThermostatCardEditor extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._config = {};
-    this._hass   = null;
+    this._config   = {};
+    this._hass     = null;
+    this._domReady = false;
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    if (!this._domReady) this._buildDOM();
+    else this._updateDOM();
   }
 
   setConfig(config) {
     this._config = { ...config };
-    this._render();
+    if (this._domReady) this._updateDOM();
   }
 
-  _render() {
-    if (!this._hass) return;
+  // ── DOM eenmalig opbouwen ────────────────────────────────────
 
-    const currentAction = this._config.tap_action?.action ?? 'more-info';
-    const navPath       = this._config.tap_action?.navigation_path ?? '';
-
+  _buildDOM() {
     this.shadowRoot.innerHTML = `
       <style>
         .form      { display:flex; flex-direction:column; gap:16px; padding:8px 0; }
-        .nav-field { display: ${currentAction === 'navigate' ? 'block' : 'none'}; }
+        .nav-field { display:none; }
         label      { font-size:12px; color:var(--secondary-text-color);
                      margin-bottom:2px; display:block; }
       </style>
@@ -55,9 +54,9 @@ class ThermostatCardEditor extends HTMLElement {
       </div>
     `;
 
+    // Entity picker
     const picker = this.shadowRoot.getElementById('entity-picker');
     picker.hass           = this._hass;
-    picker.value          = this._config.entity || '';
     picker.includeDomains = ['climate'];
     picker.addEventListener('value-changed', (e) => {
       if (!e.detail.value) return;
@@ -65,24 +64,25 @@ class ThermostatCardEditor extends HTMLElement {
       this._fire();
     });
 
+    // Actie-keuzelijst — luistert naar value-changed, bouwt DOM NIET opnieuw
     const actionSelect = this.shadowRoot.getElementById('action-type');
-    actionSelect.value = currentAction;
     actionSelect.addEventListener('value-changed', (e) => {
-      const val      = e.detail?.value ?? currentAction;
-      const navField = this.shadowRoot.querySelector('.nav-field');
-      if (navField) navField.style.display = val === 'navigate' ? 'block' : 'none';
+      const val = e.detail?.value;
+      if (!val) return;
+      this.shadowRoot.querySelector('.nav-field').style.display =
+        val === 'navigate' ? 'block' : 'none';
       this._config = {
         ...this._config,
-        tap_action: val === 'none'      ? { action: 'none' }
-                  : val === 'navigate'  ? { action: 'navigate',
+        tap_action: val === 'none'     ? { action: 'none' }
+                  : val === 'navigate' ? { action: 'navigate',
                       navigation_path: this._config.tap_action?.navigation_path ?? '' }
                   : { action: 'more-info' },
       };
       this._fire();
     });
 
+    // Navigatiepad-veld
     const navField = this.shadowRoot.getElementById('nav-path');
-    navField.value = navPath;
     navField.addEventListener('change', (e) => {
       this._config = {
         ...this._config,
@@ -90,6 +90,31 @@ class ThermostatCardEditor extends HTMLElement {
       };
       this._fire();
     });
+
+    this._domReady = true;
+    this._updateDOM();
+  }
+
+  // ── Alleen waarden bijwerken ─────────────────────────────────
+
+  _updateDOM() {
+    const action  = this._config.tap_action?.action ?? 'more-info';
+    const navPath = this._config.tap_action?.navigation_path ?? '';
+
+    const picker = this.shadowRoot.getElementById('entity-picker');
+    if (picker) {
+      picker.hass  = this._hass;
+      picker.value = this._config.entity || '';
+    }
+
+    const actionSelect = this.shadowRoot.getElementById('action-type');
+    if (actionSelect) actionSelect.value = action;
+
+    const navField = this.shadowRoot.querySelector('.nav-field');
+    if (navField) navField.style.display = action === 'navigate' ? 'block' : 'none';
+
+    const navPath_ = this.shadowRoot.getElementById('nav-path');
+    if (navPath_) navPath_.value = navPath;
   }
 
   _fire() {
