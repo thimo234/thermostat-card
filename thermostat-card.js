@@ -55,7 +55,6 @@ class ThermostatCardEditor extends HTMLElement {
       </div>
     `;
 
-    // ── Entity picker ────────────────────────────────────────
     const picker = this.shadowRoot.getElementById('entity-picker');
     picker.hass           = this._hass;
     picker.value          = this._config.entity || '';
@@ -66,25 +65,22 @@ class ThermostatCardEditor extends HTMLElement {
       this._fire();
     });
 
-    // ── Actie dropdown ───────────────────────────────────────
     const actionSelect = this.shadowRoot.getElementById('action-type');
     actionSelect.value = currentAction;
     actionSelect.addEventListener('selected', (e) => {
-      const val = e.detail?.item?.value ?? currentAction;
+      const val      = e.detail?.item?.value ?? currentAction;
       const navField = this.shadowRoot.querySelector('.nav-field');
       if (navField) navField.style.display = val === 'navigate' ? 'block' : 'none';
-
       this._config = {
         ...this._config,
-        tap_action: val === 'none'     ? { action: 'none' }
-                  : val === 'navigate' ? { action: 'navigate',
+        tap_action: val === 'none'      ? { action: 'none' }
+                  : val === 'navigate'  ? { action: 'navigate',
                       navigation_path: this._config.tap_action?.navigation_path ?? '' }
                   : { action: 'more-info' },
       };
       this._fire();
     });
 
-    // ── Navigatiepad ─────────────────────────────────────────
     const navField = this.shadowRoot.getElementById('nav-path');
     navField.value = navPath;
     navField.addEventListener('change', (e) => {
@@ -99,8 +95,7 @@ class ThermostatCardEditor extends HTMLElement {
   _fire() {
     this.dispatchEvent(new CustomEvent('config-changed', {
       detail: { config: this._config },
-      bubbles: true,
-      composed: true,
+      bubbles: true, composed: true,
     }));
   }
 }
@@ -109,18 +104,20 @@ customElements.define('thermostat-card-editor', ThermostatCardEditor);
 
 
 // ═══════════════════════════════════════════════════════════════
-//  Thermostat Card — de kaart zelf
+//  Thermostat Card
 // ═══════════════════════════════════════════════════════════════
 
 class ThermostatCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    this._showSetpoint = false;
-    this._timer        = null;
-    this._hass         = null;
-    this._config       = null;
-    this._domReady     = false;
+    this._showSetpoint  = false;
+    this._timer         = null;
+    this._hass          = null;
+    this._config        = null;
+    this._domReady      = false;
+    this._pendingTemp   = null;   // lokale waarde vóór HA-update
+    this._listenerAdded = false;  // voorkomt dubbele listeners
   }
 
   // ── HA-methodes ─────────────────────────────────────────────
@@ -130,25 +127,35 @@ class ThermostatCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return {
-      entity    : 'climate.woonkamer',
-      tap_action: { action: 'more-info' },
-    };
+    return { entity: 'climate.woonkamer', tap_action: { action: 'more-info' } };
   }
 
   setConfig(config) {
     if (!config.entity) throw new Error('Definieer een entity (climate.*)');
-    this._config   = config;
-    this._domReady = false;   // forceer volledige rebuild bij config-wijziging
+    const entityChanged  = this._config?.entity !== config.entity;
+    this._config         = config;
+    if (entityChanged) {
+      this._pendingTemp  = null;
+      this._domReady     = false;
+    }
     this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
+
+    // Zodra HA de state bijwerkt tot de verwachte waarde, pending wissen
+    if (this._pendingTemp !== null && this._config) {
+      const s = hass.states[this._config.entity];
+      if (s && Math.abs((s.attributes.temperature ?? 0) - this._pendingTemp) < 0.05) {
+        this._pendingTemp = null;
+      }
+    }
+
     this._render();
   }
 
-  // ── Interne helpers ──────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────
 
   get _stateObj() {
     return this._hass?.states[this._config?.entity];
@@ -158,25 +165,30 @@ class ThermostatCard extends HTMLElement {
     const s = this._stateObj;
     if (!s) return;
 
-    const cur  = parseFloat(s.attributes.temperature      ?? 20);
-    const step = parseFloat(s.attributes.target_temp_step ?? 0.5);
-    const minT = parseFloat(s.attributes.min_temp         ?? 5);
-    const maxT = parseFloat(s.attributes.max_temp         ?? 35);
+    // Gebruik _pendingTemp als basis bij snelle opeenvolgende presses
+    const cur  = this._pendingTemp
+                 ?? parseFloat(s.attributes.temperature      ?? 20);
+    const step = parseFloat(s.attributes.target_temp_step    ?? 0.5);
+    const minT = parseFloat(s.attributes.min_temp            ?? 5);
+    const maxT = parseFloat(s.attributes.max_temp            ?? 35);
     const next = parseFloat(
       Math.min(maxT, Math.max(minT, cur + delta * step)).toFixed(1)
     );
+
+    this._pendingTemp = next;
 
     this._hass.callService('climate', 'set_temperature', {
       entity_id : this._config.entity,
       temperature: next,
     });
 
-    // Toon instelpunt 5 seconden; verdere drukken verlengen de timer
+    // Toon instelpunt; timer herstart bij elke druk
     this._showSetpoint = true;
     clearTimeout(this._timer);
     this._timer = setTimeout(() => {
       this._showSetpoint = false;
-      this._timer = null;
+      this._timer        = null;
+      this._pendingTemp  = null;
       this._update();
     }, 5000);
 
@@ -185,12 +197,10 @@ class ThermostatCard extends HTMLElement {
 
   _handleCenterTap() {
     const action = this._config.tap_action?.action ?? 'more-info';
-
     if (action === 'more-info') {
       this.dispatchEvent(new CustomEvent('hass-more-info', {
-        bubbles : true,
-        composed: true,
-        detail  : { entityId: this._config.entity },
+        bubbles: true, composed: true,
+        detail: { entityId: this._config.entity },
       }));
     } else if (action === 'navigate') {
       const path = this._config.tap_action?.navigation_path;
@@ -201,7 +211,6 @@ class ThermostatCard extends HTMLElement {
         );
       }
     }
-    // action === 'none' → niets doen
   }
 
   _getBubbleColor(s) {
@@ -213,7 +222,7 @@ class ThermostatCard extends HTMLElement {
     return                         'rgba(136,136,136, 0.25)';
   }
 
-  // ── DOM opbouw (één keer) ────────────────────────────────────
+  // ── DOM — één keer opbouwen ──────────────────────────────────
 
   _buildDOM() {
     this.shadowRoot.innerHTML = `
@@ -242,17 +251,15 @@ class ThermostatCard extends HTMLElement {
           transition     : opacity .15s, transform .15s;
           -webkit-tap-highlight-color: transparent;
         }
-        .adj-btn:active {
-          opacity  : 0.5;
-          transform: scale(0.88);
-        }
+        .adj-btn:active { opacity:.5; transform:scale(0.88); }
 
+        /* Bubbel: altijd temp-value exact centreren */
         .bubble {
+          position       : relative;
           width          : 65px;
           height         : 60px;
           border-radius  : 30%;
           display        : flex;
-          flex-direction : column;
           align-items    : center;
           justify-content: center;
           transition     : background-color 0.4s ease;
@@ -262,19 +269,25 @@ class ThermostatCard extends HTMLElement {
         .bubble[data-clickable="true"] { cursor: pointer; }
         .bubble:active                 { opacity: 0.75; }
 
+        /* Temperatuur altijd exact in het midden */
         .temp-value {
           font-size  : 24px;
           font-weight: 500;
           color      : white;
           line-height: 1;
+          text-align : center;
         }
 
+        /* Label zweeft absoluut onderaan — beïnvloedt uitlijning niet */
         .indicator {
-          font-size     : 10px;
-          color         : rgba(255,255,255,0.80);
-          margin-top    : 3px;
-          letter-spacing: 0.02em;
-          min-height    : 14px;
+          position   : absolute;
+          bottom     : 5px;
+          left       : 50%;
+          transform  : translateX(-50%);
+          font-size  : 9px;
+          color      : rgba(255,255,255,0.80);
+          white-space: nowrap;
+          pointer-events: none;
         }
       </style>
 
@@ -283,8 +296,7 @@ class ThermostatCard extends HTMLElement {
           <ha-icon icon="mdi:minus"></ha-icon>
         </button>
 
-        <div class="bubble" data-action="center" role="button"
-             aria-label="Temperatuur">
+        <div class="bubble" data-action="center" role="button">
           <span class="temp-value" id="temp-display">—</span>
           <span class="indicator"  id="indicator"></span>
         </div>
@@ -295,40 +307,42 @@ class ThermostatCard extends HTMLElement {
       </div>
     `;
 
-    // ── Event delegation: één listener, blijft altijd actief ──
-    this.shadowRoot.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-action]');
-      if (!el) return;
-      switch (el.dataset.action) {
-        case 'minus' : this._adjustTemp(-1);       break;
-        case 'plus'  : this._adjustTemp(1);        break;
-        case 'center': this._handleCenterTap();    break;
-      }
-    });
+    // Listener EENMALIG op shadow root — overleeft alle _update() aanroepen
+    if (!this._listenerAdded) {
+      this.shadowRoot.addEventListener('click', (e) => {
+        const el = e.target.closest('[data-action]');
+        if (!el) return;
+        switch (el.dataset.action) {
+          case 'minus' : this._adjustTemp(-1);    break;
+          case 'plus'  : this._adjustTemp(1);     break;
+          case 'center': this._handleCenterTap(); break;
+        }
+      });
+      this._listenerAdded = true;
+    }
 
     this._domReady = true;
   }
 
-  // ── Update (alleen wijzigende delen) ─────────────────────────
+  // ── Update — alleen veranderende waarden ─────────────────────
 
   _update() {
     const s = this._stateObj;
     if (!s) return;
 
     const currentTemp = s.attributes.current_temperature ?? '—';
-    const setpoint    = s.attributes.temperature         ?? '—';
+    // _pendingTemp gebruiken zolang HA nog niet heeft bijgewerkt
+    const setpoint    = this._pendingTemp ?? s.attributes.temperature ?? '—';
     const displayTemp = this._showSetpoint ? setpoint : currentTemp;
 
     const tempEl      = this.shadowRoot.getElementById('temp-display');
     const indicatorEl = this.shadowRoot.getElementById('indicator');
     const bubble      = this.shadowRoot.querySelector('.bubble');
 
-    if (tempEl)      tempEl.textContent = displayTemp;
+    if (tempEl)      tempEl.textContent      = displayTemp;
     if (indicatorEl) indicatorEl.textContent = this._showSetpoint ? 'instelpunt' : '';
     if (bubble) {
       bubble.style.backgroundColor = this._getBubbleColor(s);
-
-      // Klikbaarheid tonen
       const action = this._config?.tap_action?.action ?? 'more-info';
       bubble.dataset.clickable = action !== 'none' ? 'true' : 'false';
       bubble.setAttribute('aria-label',
@@ -352,7 +366,6 @@ class ThermostatCard extends HTMLElement {
       return;
     }
 
-    // DOM één keer bouwen; daarna alleen updaten
     if (!this._domReady) this._buildDOM();
     this._update();
   }
@@ -366,6 +379,6 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type       : 'thermostat-card',
   name       : 'Thermostat Card',
-  description: 'Thermostaatkaart — huidige temperatuur, 5 sec instelpunt na aanpassing',
+  description: 'Thermostaatkaart — huidige temp, 5 sec instelpunt na aanpassing',
   preview    : false,
 });
