@@ -53,8 +53,12 @@ class ThermostatCardEditor extends HTMLElement {
         </div>
         <div class="nav-field">
           <label>Navigatiepad</label>
-          <ha-textfield id="nav-path" label="bijv. /lovelace/thermostaat"
-            style="width:100%"></ha-textfield>
+          <input id="nav-path" type="text" placeholder="bijv. /lovelace/thermostaat" style="
+            width:100%; padding:10px 8px; border-radius:6px; box-sizing:border-box;
+            background:var(--secondary-background-color, #2a2a2a);
+            color:var(--primary-text-color, white);
+            border:1px solid var(--divider-color, rgba(255,255,255,0.2));
+            font-size:14px; outline:none;" />
         </div>
       </div>
     `;
@@ -88,7 +92,7 @@ class ThermostatCardEditor extends HTMLElement {
 
     // Navigatiepad-veld
     const navField = this.shadowRoot.getElementById('nav-path');
-    navField.addEventListener('change', (e) => {
+    navField.addEventListener('input', (e) => {
       this._config = {
         ...this._config,
         tap_action: { action: 'navigate', navigation_path: e.target.value.trim() },
