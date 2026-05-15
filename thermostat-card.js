@@ -53,12 +53,7 @@ class ThermostatCardEditor extends HTMLElement {
         </div>
         <div class="nav-field">
           <label>Navigatiepad</label>
-          <input id="nav-path" type="text" placeholder="bijv. /lovelace/thermostaat" style="
-            width:100%; padding:10px 8px; border-radius:6px; box-sizing:border-box;
-            background:var(--secondary-background-color, #2a2a2a);
-            color:var(--primary-text-color, white);
-            border:1px solid var(--divider-color, rgba(255,255,255,0.2));
-            font-size:14px; outline:none;" />
+          <ha-selector id="nav-selector" style="width:100%"></ha-selector>
         </div>
       </div>
     `;
@@ -91,11 +86,13 @@ class ThermostatCardEditor extends HTMLElement {
     });
 
     // Navigatiepad-veld
-    const navField = this.shadowRoot.getElementById('nav-path');
-    navField.addEventListener('input', (e) => {
+    const navSelector = this.shadowRoot.getElementById('nav-selector');
+    navSelector.hass     = this._hass;
+    navSelector.selector = { navigation: {} };
+    navSelector.addEventListener('value-changed', (e) => {
       this._config = {
         ...this._config,
-        tap_action: { action: 'navigate', navigation_path: e.target.value.trim() },
+        tap_action: { action: 'navigate', navigation_path: e.detail.value },
       };
       this._fire();
     });
@@ -122,8 +119,11 @@ class ThermostatCardEditor extends HTMLElement {
     const navField = this.shadowRoot.querySelector('.nav-field');
     if (navField) navField.style.display = action === 'navigate' ? 'block' : 'none';
 
-    const navPath_ = this.shadowRoot.getElementById('nav-path');
-    if (navPath_) navPath_.value = navPath;
+    const navSelector = this.shadowRoot.getElementById('nav-selector');
+    if (navSelector) {
+      navSelector.hass  = this._hass;
+      navSelector.value = navPath;
+    }
   }
 
   _fire() {
