@@ -251,8 +251,14 @@ class ThermostatCard extends HTMLElement {
         .adj-btn ha-icon {
           --mdc-icon-size: 2em;
           display        : flex;
-          filter         : drop-shadow(0 0 1.5px white)
-                           drop-shadow(0 0 1.5px white);
+          filter         : drop-shadow( 1px  0px 0 white)
+                           drop-shadow(-1px  0px 0 white)
+                           drop-shadow( 0px  1px 0 white)
+                           drop-shadow( 0px -1px 0 white)
+                           drop-shadow( 1px  1px 0 white)
+                           drop-shadow(-1px -1px 0 white)
+                           drop-shadow( 1px -1px 0 white)
+                           drop-shadow(-1px  1px 0 white);
         }
 
         /* Bubbel: altijd temp-value exact centreren */
