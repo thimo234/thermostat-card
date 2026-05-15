@@ -143,15 +143,6 @@ class ThermostatCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-
-    // Zodra HA de state bijwerkt tot de verwachte waarde, pending wissen
-    if (this._pendingTemp !== null && this._config) {
-      const s = hass.states[this._config.entity];
-      if (s && Math.abs((s.attributes.temperature ?? 0) - this._pendingTemp) < 0.05) {
-        this._pendingTemp = null;
-      }
-    }
-
     this._render();
   }
 
@@ -165,7 +156,8 @@ class ThermostatCard extends HTMLElement {
     const s = this._stateObj;
     if (!s) return;
 
-    // Gebruik _pendingTemp als basis bij snelle opeenvolgende presses
+    // Gebruik _pendingTemp als basis zodat snelle opeenvolgende presses
+    // op de lokale waarde werken, niet op de (nog niet bijgewerkte) HA-state
     const cur  = this._pendingTemp
                  ?? parseFloat(s.attributes.temperature      ?? 20);
     const step = parseFloat(s.attributes.target_temp_step    ?? 0.5);
@@ -175,17 +167,17 @@ class ThermostatCard extends HTMLElement {
       Math.min(maxT, Math.max(minT, cur + delta * step)).toFixed(1)
     );
 
-    this._pendingTemp = next;
-
-    this._hass.callService('climate', 'set_temperature', {
-      entity_id : this._config.entity,
-      temperature: next,
-    });
-
-    // Toon instelpunt; timer herstart bij elke druk
+    this._pendingTemp  = next;
     this._showSetpoint = true;
+
+    // Debounce: timer herstart bij elke druk.
+    // De service wordt pas aangeroepen na 5 seconden inactiviteit.
     clearTimeout(this._timer);
     this._timer = setTimeout(() => {
+      this._hass.callService('climate', 'set_temperature', {
+        entity_id : this._config.entity,
+        temperature: this._pendingTemp,
+      });
       this._showSetpoint = false;
       this._timer        = null;
       this._pendingTemp  = null;
