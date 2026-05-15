@@ -230,20 +230,30 @@ class ThermostatCard extends HTMLElement {
         }
 
         .adj-btn {
+          flex           : 1;          /* schaalt mee met beschikbare ruimte */
+          min-width      : 0;
           background     : none;
           border         : none;
           color          : white;
           cursor         : pointer;
-          width          : 70px;
-          height         : 60px;
+          aspect-ratio   : 1;          /* altijd vierkant */
           display        : flex;
           align-items    : center;
           justify-content: center;
           border-radius  : 12px;
           transition     : opacity .15s, transform .15s;
           -webkit-tap-highlight-color: transparent;
+          font-size      : clamp(16px, 5cqw, 32px);
         }
         .adj-btn:active { opacity:.5; transform:scale(0.88); }
+
+        /* Icoontje schaalt met de knop mee en is dikgedrukt via drop-shadow */
+        .adj-btn ha-icon {
+          --mdc-icon-size: 2em;
+          display        : flex;
+          filter         : drop-shadow(0 0 1.5px white)
+                           drop-shadow(0 0 1.5px white);
+        }
 
         /* Bubbel: altijd temp-value exact centreren */
         .bubble {
