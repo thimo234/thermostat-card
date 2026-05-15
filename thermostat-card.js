@@ -1,3 +1,109 @@
+// ═══════════════════════════════════════════════════════════════
+//  Thermostat Card — visuele editor
+// ═══════════════════════════════════════════════════════════════
+
+class ThermostatCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: 'open' });
+    this._config = {};
+    this._hass   = null;
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._render();
+  }
+
+  setConfig(config) {
+    this._config = { ...config };
+    this._render();
+  }
+
+  _render() {
+    if (!this._hass) return;
+
+    this.shadowRoot.innerHTML = `
+      <style>
+        .form {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          padding: 8px 0;
+        }
+        label {
+          font-size: 12px;
+          color: var(--secondary-text-color);
+          margin-bottom: 2px;
+          display: block;
+        }
+      </style>
+      <div class="form">
+        <div>
+          <label>Thermostaat entiteit *</label>
+          <ha-entity-picker
+            id="entity-picker"
+            label="Selecteer klimaatentiteit"
+            allow-custom-entity
+          ></ha-entity-picker>
+        </div>
+        <div>
+          <label>Navigatiepad bij tikken (optioneel)</label>
+          <ha-textfield
+            id="nav-path"
+            label="bijv. /lovelace/thermostaat"
+            style="width:100%"
+          ></ha-textfield>
+        </div>
+      </div>
+    `;
+
+    // ── Entity picker ────────────────────────────────────────
+    const picker = this.shadowRoot.getElementById('entity-picker');
+    picker.hass           = this._hass;
+    picker.value          = this._config.entity || '';
+    picker.includeDomains = ['climate'];
+
+    picker.addEventListener('value-changed', (e) => {
+      if (!e.detail.value) return;
+      this._config = { ...this._config, entity: e.detail.value };
+      this._fire();
+    });
+
+    // ── Navigatiepad ─────────────────────────────────────────
+    const navField = this.shadowRoot.getElementById('nav-path');
+    navField.value = this._config.tap_action?.navigation_path || '';
+
+    navField.addEventListener('change', (e) => {
+      const path = e.target.value.trim();
+      this._config = {
+        ...this._config,
+        tap_action: path
+          ? { action: 'navigate', navigation_path: path }
+          : undefined,
+      };
+      this._fire();
+    });
+  }
+
+  _fire() {
+    this.dispatchEvent(
+      new CustomEvent('config-changed', {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+}
+
+customElements.define('thermostat-card-editor', ThermostatCardEditor);
+
+
+// ═══════════════════════════════════════════════════════════════
+//  Thermostat Card — de kaart zelf
+// ═══════════════════════════════════════════════════════════════
+
 class ThermostatCard extends HTMLElement {
   constructor() {
     super();
@@ -8,7 +114,15 @@ class ThermostatCard extends HTMLElement {
     this._config       = null;
   }
 
-  // ── Verplichte HA-methodes ──────────────────────────────────
+  // ── Verplichte HA-methodes ───────────────────────────────────
+
+  static getConfigElement() {
+    return document.createElement('thermostat-card-editor');
+  }
+
+  static getStubConfig() {
+    return { entity: 'climate.woonkamer' };
+  }
 
   setConfig(config) {
     if (!config.entity) throw new Error('Definieer een entity (climate.*)');
@@ -21,16 +135,7 @@ class ThermostatCard extends HTMLElement {
     this._render();
   }
 
-  static getConfigElement() {
-    // optioneel: visuele editor — voorlopig niet geïmplementeerd
-    return null;
-  }
-
-  static getStubConfig() {
-    return { entity: 'climate.woonkamer' };
-  }
-
-  // ── Interne helpers ─────────────────────────────────────────
+  // ── Interne helpers ──────────────────────────────────────────
 
   get _stateObj() {
     return this._hass?.states[this._config?.entity];
@@ -84,7 +189,7 @@ class ThermostatCard extends HTMLElement {
     }
   }
 
-  // ── Render ──────────────────────────────────────────────────
+  // ── Render ───────────────────────────────────────────────────
 
   _render() {
     if (!this._hass || !this._config) return;
@@ -93,7 +198,7 @@ class ThermostatCard extends HTMLElement {
     if (!s) {
       this.shadowRoot.innerHTML = `
         <style>:host{display:block}</style>
-        <div style="color:red;padding:8px">
+        <div style="color:var(--error-color);padding:8px">
           Entity niet gevonden: ${this._config.entity}
         </div>`;
       return;
@@ -104,7 +209,6 @@ class ThermostatCard extends HTMLElement {
     const setpoint    = s.attributes.temperature          ?? '—';
     const displayTemp = this._showSetpoint ? setpoint : currentTemp;
 
-    // Kleur van de middelste bubbel
     let bubbleBg;
     if (this._showSetpoint) {
       bubbleBg = 'rgba(255,255,255,0.60)';
@@ -127,25 +231,25 @@ class ThermostatCard extends HTMLElement {
         :host { display: block; }
 
         .container {
-          display: flex;
-          align-items: center;
+          display        : flex;
+          align-items    : center;
           justify-content: center;
-          padding: 4px 0;
-          gap: 2px;
+          padding        : 4px 0;
+          gap            : 2px;
         }
 
         .adj-btn {
-          background : none;
-          border     : none;
-          color      : white;
-          cursor     : pointer;
-          width      : 70px;
-          height     : 60px;
-          display    : flex;
-          align-items: center;
+          background     : none;
+          border         : none;
+          color          : white;
+          cursor         : pointer;
+          width          : 70px;
+          height         : 60px;
+          display        : flex;
+          align-items    : center;
           justify-content: center;
-          border-radius: 12px;
-          transition : opacity .15s, transform .15s;
+          border-radius  : 12px;
+          transition     : opacity .15s, transform .15s;
           -webkit-tap-highlight-color: transparent;
         }
         .adj-btn:active {
@@ -154,17 +258,17 @@ class ThermostatCard extends HTMLElement {
         }
 
         .bubble {
-          width          : 65px;
-          height         : 60px;
-          border-radius  : 30%;
-          background-color: ${bubbleBg};
-          display        : flex;
-          flex-direction : column;
-          align-items    : center;
-          justify-content: center;
-          cursor         : pointer;
-          transition     : background-color 0.4s ease;
-          user-select    : none;
+          width            : 65px;
+          height           : 60px;
+          border-radius    : 30%;
+          background-color : ${bubbleBg};
+          display          : flex;
+          flex-direction   : column;
+          align-items      : center;
+          justify-content  : center;
+          cursor           : pointer;
+          transition       : background-color 0.4s ease;
+          user-select      : none;
           -webkit-tap-highlight-color: transparent;
         }
         .bubble:active { opacity: 0.75; }
@@ -177,9 +281,9 @@ class ThermostatCard extends HTMLElement {
         }
 
         .indicator {
-          font-size : 10px;
-          color     : rgba(255,255,255,0.80);
-          margin-top: 3px;
+          font-size     : 10px;
+          color         : rgba(255,255,255,0.80);
+          margin-top    : 3px;
           letter-spacing: 0.02em;
         }
       </style>
@@ -215,14 +319,14 @@ class ThermostatCard extends HTMLElement {
   }
 }
 
-// ── Registratie ────────────────────────────────────────────────
+// ── Registratie ─────────────────────────────────────────────────
 
 customElements.define('thermostat-card', ThermostatCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
-  type       : 'thermostat-card',
-  name       : 'Thermostat Card',
-  description: 'Thermostaatkaart — toont huidige temperatuur, 5 sec instelpunt na aanpassing',
-  preview    : false,
+  type        : 'thermostat-card',
+  name        : 'Thermostat Card',
+  description : 'Thermostaatkaart — toont huidige temperatuur, 5 sec instelpunt na aanpassing',
+  preview     : false,
 });
